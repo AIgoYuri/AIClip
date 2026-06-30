@@ -123,6 +123,17 @@ input[type=range]{padding:0;border:none;background:none;accent-color:var(--accen
 /* ── 结果 ── */
 .result-text{background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:13px;line-height:1.7;white-space:pre-wrap;max-height:300px;overflow-y:auto;margin-top:10px;font-family:inherit}
 
+/* ── 字幕编辑器 ── */
+.srt-row{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:8px;border:1px solid var(--line);margin-bottom:4px;transition:all .15s}
+.srt-row:hover{border-color:rgba(0,255,136,.3);background:rgba(0,255,136,.03)}
+.srt-idx{font-size:11px;font-weight:700;color:var(--accent);min-width:28px;padding-top:8px;text-align:center}
+.srt-time{font-size:11px;color:var(--muted);white-space:nowrap;padding-top:8px;min-width:150px}
+.srt-time input{width:60px;padding:4px 6px;font-size:11px;display:inline}
+.srt-text{flex:1}
+.srt-text textarea{width:100%;padding:6px 8px;font-size:13px;border-radius:8px;border:1px solid var(--line);background:rgba(0,0,0,.2);color:var(--ink);resize:vertical;min-height:50px;font-family:inherit;line-height:1.5}
+.srt-text textarea:focus{border-color:var(--accent);box-shadow:0 0 8px var(--glow);outline:none}
+.srt-del{font-size:10px;padding:4px 8px;margin-top:4px}
+
 /* ── 预览播放器 ── */
 .preview-box{aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;margin-top:10px}
 .preview-box video{width:100%;height:100%;display:block}
@@ -300,11 +311,25 @@ input[type=range]{padding:0;border:none;background:none;accent-color:var(--accen
     <div class="card" id="card_transcribe_result" style="display:none">
       <div class="card-title">📝 转写结果</div>
       <div class="card-sub" id="tr_summary"></div>
-      <div class="result-text" id="tr_text"></div>
-      <div class="actions">
+      <div class="actions" style="margin-bottom:10px">
         <button class="btn btn-pri" onclick="goStep(3)">下一步 → 字幕设置</button>
         <button class="btn btn-sec" onclick="goStep(1)">← 返回裁剪</button>
+        <button class="btn btn-sec" id="btn_edit_subs" onclick="loadSrtEditor()">✏️ 编辑字幕</button>
       </div>
+
+      <!-- 字幕编辑器 -->
+      <div id="srt_editor" style="display:none;margin-top:12px;border-top:1px solid var(--line);padding-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span style="font-size:15px;font-weight:700;color:var(--accent)">✏️ 字幕编辑</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-pri" onclick="saveSrtEdits()" id="btn_save_srt" style="font-size:12px;padding:6px 14px">💾 保存修改</button>
+            <button class="btn btn-sec" onclick="toggleSrtEditor()" style="font-size:12px;padding:6px 14px">✕ 关闭</button>
+          </div>
+        </div>
+        <div id="srt_edit_list" style="max-height:500px;overflow-y:auto"></div>
+      </div>
+
+      <div class="result-text" id="tr_text"></div>
     </div>
 
     <div class="step-nav">
@@ -1215,6 +1240,152 @@ function pollTranscribe(tid) {
   }, 1000)
 }
 
+// ── 字幕编辑 ──────────────────────────────────
+let _srtSegments = []
+
+function toggleSrtEditor() {
+  const el = document.getElementById('srt_editor')
+  el.style.display = el.style.display === 'none' ? '' : 'none'
+}
+
+async function loadSrtEditor() {
+  if (!SRT_PATH) { alert('没有已转录的字幕'); return }
+
+  const editor = document.getElementById('srt_editor')
+  const list = document.getElementById('srt_edit_list')
+  list.innerHTML = '<div style="color:var(--muted);font-size:13px"><span class="spinner"></span>加载字幕…</div>'
+  editor.style.display = ''
+
+  try {
+    const fd = new FormData(); fd.append('srt_path', SRT_PATH)
+    const r = await fetch('/api/srt/read', {method:'POST', body:fd})
+    const d = await r.json()
+    if (d.error) { list.innerHTML = '<span style="color:#ff5050">❌ ' + escHtml(d.error) + '</span>'; return }
+
+    _srtSegments = d.segments || []
+    renderSrtEditor()
+  } catch(e) {
+    list.innerHTML = '<span style="color:#ff5050">❌ ' + escHtml(e.message) + '</span>'
+  }
+}
+
+function renderSrtEditor() {
+  const list = document.getElementById('srt_edit_list')
+  if (!_srtSegments.length) {
+    list.innerHTML = '<span style="color:var(--muted);font-size:13px">没有字幕段</span>'
+    return
+  }
+
+  list.innerHTML = _srtSegments.map((seg, i) => {
+    const st = segTimeStr(seg.start)
+    const et = segTimeStr(seg.end)
+    const safeText = escHtml(seg.text)
+    return `<div class="srt-row" data-idx="${i}">
+      <div class="srt-idx">${seg.index}</div>
+      <div class="srt-time">
+        <input type="text" class="srt-start" value="${escAttr(st)}" title="开始时间 (HH:MM:SS.mmm)">
+        →<br>
+        <input type="text" class="srt-end" value="${escAttr(et)}" title="结束时间 (HH:MM:SS.mmm)">
+      </div>
+      <div class="srt-text">
+        <textarea class="srt-textarea" rows="${Math.max(2, seg.text.split('\n').length)}">${safeText}</textarea>
+      </div>
+      <button class="btn btn-del srt-del" onclick="removeSrtSeg(${i})">✕</button>
+    </div>`
+  }).join('')
+
+  // 底部添加：新增一条
+  list.innerHTML += `
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;padding:6px 10px">
+      <button class="btn btn-sec" onclick="addSrtSeg()" style="font-size:12px;padding:4px 12px">➕ 添加字幕</button>
+      <span style="color:var(--muted);font-size:11px">共 ${_srtSegments.length} 条</span>
+    </div>`
+}
+
+function segTimeStr(sec) {
+  const h = String(Math.floor(sec / 3600)).padStart(2, '0')
+  const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0')
+  const s = String(Math.floor(sec % 60)).padStart(2, '0')
+  const ms = String(Math.floor((sec % 1) * 1000)).padStart(3, '0')
+  return h + ':' + m + ':' + s + '.' + ms
+}
+
+function parseTimeStr(str) {
+  // 支持 HH:MM:SS.mmm 或 MM:SS.mmm
+  str = str.trim()
+  const m = str.match(/^(\d{1,2}):(\d{2}):(\d{2})\.(\d{1,3})$/)  // HH:MM:SS.mmm
+  if (m) return parseInt(m[1])*3600 + parseInt(m[2])*60 + parseInt(m[3]) + parseInt(m[4])/1000
+  const m2 = str.match(/^(\d{1,2}):(\d{2})\.(\d{1,3})$/)  // MM:SS.mmm
+  if (m2) return parseInt(m2[1])*60 + parseInt(m2[2]) + parseInt(m2[3])/1000
+  return NaN
+}
+
+async function saveSrtEdits() {
+  const rows = document.querySelectorAll('.srt-row')
+  const updated = []
+  for (const row of rows) {
+    const idx = parseInt(row.dataset.idx)
+    const original = _srtSegments[idx]
+    if (!original) continue
+
+    const startStr = row.querySelector('.srt-start').value.trim()
+    const endStr = row.querySelector('.srt-end').value.trim()
+    const text = row.querySelector('.srt-textarea').value
+
+    // 解析时间，如果解析失败则保持原值
+    const newStart = parseTimeStr(startStr)
+    const newEnd = parseTimeStr(endStr)
+
+    updated.push({
+      index: original.index,
+      start: isNaN(newStart) ? original.start : newStart,
+      end: isNaN(newEnd) ? original.end : newEnd,
+      text: text || original.text,
+    })
+  }
+
+  if (!updated.length) { alert('没有可保存的字幕'); return }
+
+  const btn = document.getElementById('btn_save_srt')
+  btn.disabled = true; btn.textContent = '保存中…'
+
+  try {
+    const fd = new FormData()
+    fd.append('srt_path', SRT_PATH)
+    fd.append('segments', JSON.stringify(updated))
+    const r = await fetch('/api/srt/write', {method:'POST', body:fd})
+    const d = await r.json()
+    if (d.error) { alert('保存失败: ' + d.error); return }
+    // 更新内存中的分段
+    _srtSegments = updated
+    alert('✅ 字幕已保存，共 ' + d.count + ' 条')
+    // 刷新转写文本显示
+    document.getElementById('tr_text').textContent = updated.map(s => s.text).join('\n')
+    // 刷新字幕预览
+    setTimeout(scheduleSubPreview, 200)
+  } catch(e) {
+    alert('保存失败: ' + e.message)
+  }
+  btn.disabled = false; btn.textContent = '💾 保存修改'
+}
+
+function removeSrtSeg(idx) {
+  if (!confirm('删除第 ' + _srtSegments[idx].index + ' 条字幕？')) return
+  _srtSegments.splice(idx, 1)
+  // 重新编号
+  _srtSegments.forEach((seg, i) => seg.index = i + 1)
+  renderSrtEditor()
+}
+
+function addSrtSeg() {
+  const last = _srtSegments[_srtSegments.length - 1]
+  const newIdx = _srtSegments.length + 1
+  const start = last ? last.end : 0
+  const end = start + 3  // 默认3秒
+  _srtSegments.push({ index: newIdx, start, end, text: '请输入字幕文本' })
+  renderSrtEditor()
+}
+
 // ── Step 3: 字幕实时预览（截图模式） ─────────
 let _subPreviewTimer = null
 
@@ -1470,6 +1641,10 @@ function formatTime(s) {
 function escHtml(s) {
   if (!s) return ''
   const d = document.createElement('div'); d.textContent = s; return d.innerHTML
+}
+function escAttr(s) {
+  // 用于 HTML 属性的转义（把 " 和 &lt; &gt; &amp; 都转掉）
+  return escHtml(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
 // ── 打开输出文件夹 ──────────────────────────────

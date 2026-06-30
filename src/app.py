@@ -944,6 +944,84 @@ async def api_video(filename: str):
     )
 
 
+# ── SRT 字幕编辑 ──────────────────────────────────────
+
+def _parse_srt(srt_path: Path) -> list[dict]:
+    """将 SRT 文件解析为 [{index, start, end, text}]"""
+    segments = []
+    try:
+        content = srt_path.read_text(encoding="utf-8")
+    except Exception:
+        return segments
+    blocks = re.split(r"\n\s*\n", content.strip())
+    for block in blocks:
+        lines = block.strip().split("\n")
+        if len(lines) < 3:
+            continue
+        # 第一行：序号
+        try:
+            idx = int(lines[0].strip())
+        except ValueError:
+            continue
+        # 第二行：时间轴 00:00:01,000 --> 00:00:04,000
+        m = re.match(
+            r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*"
+            r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})",
+            lines[1]
+        )
+        if not m:
+            continue
+        start = int(m.group(1))*3600 + int(m.group(2))*60 + int(m.group(3)) + int(m.group(4))/1000
+        end   = int(m.group(5))*3600 + int(m.group(6))*60 + int(m.group(7)) + int(m.group(8))/1000
+        text = "\n".join(lines[2:])
+        segments.append({"index": idx, "start": round(start, 3), "end": round(end, 3), "text": text})
+    return segments
+
+
+def _write_srt(srt_path: Path, segments: list[dict]) -> None:
+    """将 [{index, start, end, text}] 写回 SRT 文件"""
+    lines = []
+    for seg in segments:
+        def _fmt(sec):
+            h = int(sec // 3600)
+            m = int((sec % 3600) // 60)
+            s = int(sec % 60)
+            ms = int(round((sec % 1) * 1000))
+            return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+        lines.append(str(seg["index"]))
+        lines.append(f"{_fmt(seg['start'])} --> {_fmt(seg['end'])}")
+        lines.append(seg["text"])
+        lines.append("")
+    srt_path.write_text("\n".join(lines), encoding="utf-8")
+
+
+@app.post("/api/srt/read")
+async def api_srt_read(srt_path: str = Form(...)):
+    """读取 SRT 文件返回 JSON 字幕段"""
+    sp = Path(srt_path)
+    if not sp.exists():
+        return JSONResponse({"error": "SRT 文件不存在"}, status_code=404)
+    segs = _parse_srt(sp)
+    return JSONResponse({"segments": segs, "srt_path": str(sp)})
+
+
+@app.post("/api/srt/write")
+async def api_srt_write(srt_path: str = Form(...), segments: str = Form(...)):
+    """保存编辑后的字幕到 SRT 文件"""
+    sp = Path(srt_path)
+    if not sp.parent.exists():
+        return JSONResponse({"error": "目录不存在"}, status_code=404)
+    try:
+        segs = json.loads(segments)
+    except json.JSONDecodeError:
+        return JSONResponse({"error": "JSON 解析失败"}, status_code=400)
+    if not isinstance(segs, list) or not segs:
+        return JSONResponse({"error": "字幕段为空"}, status_code=400)
+    _write_srt(sp, segs)
+    print(f"[SRT] ✅ 字幕已保存: {sp.name}, {len(segs)} 条")
+    return JSONResponse({"ok": True, "count": len(segs), "srt_path": str(sp)})
+
+
 # ── 打开输出文件夹 ─────────────────────────────────────
 
 @app.post("/api/open-output")
