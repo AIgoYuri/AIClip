@@ -778,7 +778,7 @@ async def api_preview_bgm(
                 fc = (
                     f"[0:a]volume={video_volume}[va];"
                     f"[1:a]aloop=loop=-1:size=0:start=0,volume={bgm_volume}[bgm];"
-                    "[va][bgm]amix=inputs=2:duration=longest[aout]"
+                    "[va][bgm]amix=inputs=2:duration=first[aout]"
                 )
                 print(f"[BGM-PREVIEW] bgm={bgm_path}, vol={bgm_volume}, video_vol={video_volume}")
                 subprocess.run([
@@ -850,7 +850,7 @@ def _bg_export(tid, video_path, srt_path, bgm_path, speed, bgm_vol, video_vol, b
         if bgm_path and Path(bgm_path).exists():
             _update_task(tid, progress=30, message="混入 BGM…")
             bg = tmp / f"bgm{current.suffix}"
-            fc = f"[0:a]volume={video_vol}[va];[1:a]aloop=loop=-1:size=0:start=0,volume={bgm_vol}[bgm];[va][bgm]amix=inputs=2:duration=longest[aout]"
+            fc = f"[0:a]volume={video_vol}[va];[1:a]aloop=loop=-1:size=0:start=0,volume={bgm_vol}[bgm];[va][bgm]amix=inputs=2:duration=first[aout]"
             subprocess.run(["ffmpeg","-y","-i",str(current),"-i",str(bgm_path),
                 "-filter_complex",fc,"-map","0:v","-map","[aout]","-c:v","mpeg4","-q:v","5","-c:a","aac",
                 "-movflags","+faststart",str(bg)],
