@@ -1,0 +1,1639 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>AICut — AIgoYuri</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+/* ── 科幻主题 ── */
+:root {
+  --bg:#0a0e14; --surface:#121820; --card:rgba(20,30,45,.75);
+  --ink:#d0d8e0; --muted:#6a7a8a; --line:rgba(80,180,255,.15);
+  --accent:#00ff88; --glow:rgba(0,255,136,.25);
+  --cyan:#00ccff; --purple:#8844ff;
+  --radius:16px; --shadow:0 8px 32px rgba(0,0,0,.4);
+}
+
+/* ── 亮色主题 ── */
+[data-theme="light"] {
+  --bg:#f0f2f5; --surface:#ffffff; --card:rgba(255,255,255,.9);
+  --ink:#1a1a2e; --muted:#6b7280; --line:rgba(0,0,0,.08);
+  --accent:#00cc88; --glow:rgba(0,204,136,.2);
+  --cyan:#0088cc; --purple:#6644cc;
+  --shadow:0 8px 32px rgba(0,0,0,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{margin:0;color:var(--ink);background:var(--bg);font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(0,255,136,.04),transparent 50%),radial-gradient(ellipse at 80% 50%,rgba(0,204,255,.04),transparent 50%);pointer-events:none;z-index:0}
+
+/* ── 布局 ── */
+.app{display:grid;grid-template-columns:240px 1fr;min-height:100vh;position:relative;z-index:1}
+
+/* ── 侧栏 ── */
+.sidebar{padding:24px 16px;background:rgba(10,14,20,.85);border-right:1px solid var(--line);backdrop-filter:blur(12px);display:flex;flex-direction:column}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:28px}
+.logo-icon{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--cyan));display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;color:#0a0e14;box-shadow:0 0 20px var(--glow)}
+.logo-text{font-weight:800;font-size:16px;letter-spacing:-.02em;background:linear-gradient(90deg,var(--accent),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo-sub{font-size:11px;color:var(--muted);-webkit-text-fill-color:var(--muted)}
+.steps{flex:1;display:flex;flex-direction:column;gap:6px;margin-bottom:20px}
+.step{padding:12px 14px;border-radius:12px;font-size:13px;font-weight:600;color:var(--muted);cursor:default;display:flex;align-items:center;gap:10px;transition:all .2s;border:1px solid transparent}
+.step .num{width:24px;height:24px;border-radius:8px;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--muted);transition:all .2s}
+.step.active{border-color:rgba(0,255,136,.3);background:rgba(0,255,136,.06);color:var(--accent)}
+.step.active .num{background:var(--accent);color:#0a0e14}
+.step.done{color:var(--accent);opacity:.7}
+.step.done .num{background:var(--accent);color:#0a0e14}
+.step:hover{border-color:rgba(0,255,136,.15);background:rgba(0,255,136,.04);cursor:pointer}
+.step-info{font-size:11px;color:var(--muted);padding:8px 14px;border-radius:8px;background:rgba(255,255,255,.03);line-height:1.5}
+
+/* ── 主区 ── */
+.main{padding:24px;overflow-y:auto;background:rgba(10,14,20,.4)}
+.section{display:none;animation:fadeIn .3s}
+.section.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── 卡片 ── */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:16px;backdrop-filter:blur(8px);box-shadow:var(--shadow)}
+.card-title{font-size:18px;font-weight:700;margin-bottom:4px;color:#fff}
+.card-sub{font-size:13px;color:var(--muted);margin-bottom:14px}
+.card-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.card-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* ── 上传 ── */
+.upload-zone{border:1px dashed rgba(0,255,136,.3);border-radius:var(--radius);padding:40px 20px;text-align:center;cursor:pointer;transition:all .3s;background:rgba(0,255,136,.03)}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);background:rgba(0,255,136,.08);box-shadow:0 0 30px var(--glow)}
+.upload-zone .icon{font-size:48px;margin-bottom:12px}
+.upload-zone p{color:var(--muted);font-size:14px}
+
+/* ── 视频/波形 ── */
+.video-box{background:#000;border-radius:12px;overflow:hidden;position:relative}
+.video-box video{width:100%;display:block;max-height:400px}
+.video-empty{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px;background:#080c10;border-radius:12px}
+
+/* 波形时间线 */
+.wave-wrap{position:relative;margin-top:12px}
+.wave-canvas{width:100%;height:80px;border-radius:8px;display:block;cursor:crosshair;background:rgba(0,0,0,.3)}
+.wave-segments{position:absolute;bottom:0;left:0;right:0;height:32px;pointer-events:none}
+.wseg{pointer-events:auto}
+.wave-time{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:2px;padding:0 4px}
+
+/* 片段叠加 */
+.wseg{position:absolute;top:0;height:32px;border-radius:6px;z-index:5;cursor:grab;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;overflow:hidden;min-width:6px;border:1px solid rgba(255,255,255,.15)}
+.wseg .handle{position:absolute;top:0;width:8px;height:100%;cursor:ew-resize;z-index:6}
+.wseg .handle.l{left:0;border-radius:6px 0 0 6px}
+.wseg .handle.r{right:0;border-radius:0 6px 6px 0}
+.wseg .handle:hover{background:rgba(255,255,255,.2)}
+.wseg .del{position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#0a0e14;font-size:10px;line-height:16px;text-align:center;cursor:pointer;z-index:7;display:none;font-weight:800}
+.wseg:hover .del{display:block}
+
+/* 片段标签 */
+.tag-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tag{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;color:#fff;cursor:pointer;transition:opacity .2s}
+.tag .x{width:14px;height:14px;border-radius:50%;background:rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;font-size:9px;cursor:pointer}
+
+/* ── 控件 ── */
+label{font-size:12px;font-weight:700;display:block;margin-bottom:4px;color:var(--muted)}
+input,select,textarea{width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--ink);font-size:13px;outline:none;transition:border .2s}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 12px var(--glow)}
+select option{background:#121820;color:var(--ink)}
+input[type=range]{padding:0;border:none;background:none;accent-color:var(--accent)}
+
+/* ── 按钮 ── */
+.btn{border:0;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{transform:translateY(-1px)}
+.btn-pri{background:linear-gradient(135deg,var(--accent),var(--cyan));color:#0a0e14;box-shadow:0 0 20px var(--glow)}
+.btn-pri:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-sec{background:rgba(255,255,255,.06);color:var(--ink);border:1px solid var(--line)}
+.btn-sec:hover{background:rgba(255,255,255,.1);border-color:rgba(0,255,136,.3)}
+.btn-del{background:rgba(255,50,50,.15);color:#ff5050;border:1px solid rgba(255,50,50,.2)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+
+/* ── 步骤导航栏 ── */
+.step-nav{display:flex;justify-content:space-between;align-items:center;margin-top:24px;padding-top:16px;border-top:1px solid var(--line)}
+
+/* ── 进度 ── */
+.progress{height:4px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden;margin:12px 0}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--cyan));border-radius:2px;transition:width .4s;box-shadow:0 0 10px var(--glow)}
+.progress-msg{font-size:13px;color:var(--muted)}
+.progress-msg .spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--muted);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:6px;vertical-align:middle}
+.upload-detail{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:8px;font-size:12px;color:var(--muted)}
+.upload-detail strong{color:var(--ink);font-weight:700}
+.audio-fallback{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(0,204,255,.08);border:1px solid rgba(0,204,255,.18);color:var(--cyan);font-size:12px;line-height:1.5}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── 结果 ── */
+.result-text{background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:13px;line-height:1.7;white-space:pre-wrap;max-height:300px;overflow-y:auto;margin-top:10px;font-family:inherit}
+
+/* ── 预览播放器 ── */
+.preview-box{aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;margin-top:10px}
+.preview-box video{width:100%;height:100%;display:block}
+
+/* ── BGM 文件列表 ── */
+.file-list{max-height:200px;overflow-y:auto;margin-top:8px}
+.file-item{padding:8px 12px;border-radius:8px;cursor:pointer;font-size:13px;transition:all .15s;display:flex;justify-content:space-between;align-items:center}
+.file-item:hover,.file-item.sel{background:rgba(0,255,136,.08);color:var(--accent)}
+.file-item.sel{border:1px solid rgba(0,255,136,.3)}
+
+/* ── 音量滑块组 ── */
+.vol-group{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.vol-item{flex:1;min-width:120px}
+.vol-item label{font-size:11px;margin-bottom:2px}
+.vol-item input{width:100%;margin:0}
+.vol-item .val{font-size:12px;color:var(--accent);font-weight:700}
+
+/* ── 响应式 ── */
+@media(max-width:900px){
+  .app{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .card-grid{grid-template-columns:1fr}
+}
+
+/* ── 滚动条 ── */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.2)}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<!-- 侧栏 -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-icon">C</div>
+    <div><div class="logo-text">AIClip</div><div class="logo-sub">Design by AIgoYuri</div></div>
+  </div>
+  <div class="steps" id="step_nav">
+    <div class="step active" data-s="1" onclick="goStep(1)"><span class="num">1</span> 上传 &amp; 裁剪</div>
+    <div class="step" data-s="2" onclick="goStep(2)"><span class="num">2</span> 语音识别</div>
+    <div class="step" data-s="3" onclick="goStep(3)"><span class="num">3</span> 字幕设置</div>
+    <div class="step" data-s="4" onclick="goStep(4)"><span class="num">4</span> BGM 混音</div>
+    <div class="step" data-s="5" onclick="goStep(5)"><span class="num">5</span> 导出</div>
+  </div>
+  <div class="step-info" id="step_info">上传视频开始</div>
+  <div style="margin-top:12px;display:flex;gap:6px;justify-content:center">
+    <button onclick="toggleTheme()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;transition:all .2s">🌓 主题</button>
+  </div>
+</aside>
+
+<!-- 主区 -->
+<main class="main">
+
+  <!-- =============================== -->
+  <!-- STEP 1: 上传 & 裁剪              -->
+  <!-- =============================== -->
+  <div class="section active" id="sec1">
+    <div class="card">
+      <div class="card-title">📁 上传视频</div>
+      <div class="card-sub">拖拽或选择视频文件，支持 MP4 / MOV / AVI</div>
+      <div class="upload-zone" id="drop_zone">
+        <div class="icon">🎬</div>
+        <p>点击选择或拖拽视频到此处</p>
+        <input type="file" id="file_input" accept="video/*" style="display:none">
+      </div>
+    </div>
+
+    <div class="card" id="card_upload_progress" style="display:none">
+      <div class="progress"><div class="progress-fill" id="upload_progress" style="width:0%"></div></div>
+      <div class="progress-msg" id="upload_msg"><span class="spinner"></span>等待上传…</div>
+      <div class="upload-detail">
+        <span id="upload_file_name">-</span>
+        <strong id="upload_percent">0%</strong>
+      </div>
+    </div>
+
+    <div class="card" id="card_timeline" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="card-title">⏱ 选择裁剪片段</div>
+          <div class="card-sub">在波形上点击/拖拽创建片段，拖动边缘微调</div>
+        </div>
+        <div class="card-row">
+          <span style="font-size:12px;color:var(--muted)" id="clip_info">0 个片段</span>
+          <button class="btn btn-sec" onclick="clearSegs()" style="font-size:12px;padding:6px 12px">清空</button>
+        </div>
+      </div>
+
+      <div class="video-box">
+        <video id="player" controls></video>
+      </div>
+      <input type="file" id="external_audio_input" accept="audio/*" style="display:none">
+      <div class="audio-fallback" id="audio_fallback_status" style="display:none"></div>
+
+      <div class="wave-wrap">
+        <div class="wave-time"><span id="wt_start">00:00</span><span id="wt_end">00:00</span></div>
+        <div style="position:relative">
+          <canvas class="wave-canvas" id="wave_canvas"></canvas>
+          <div class="wave-segments" id="wave_segs"></div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
+          <button class="btn btn-sec" onclick="zoomIn()" style="font-size:11px;padding:4px 10px">🔍+</button>
+          <button class="btn btn-sec" onclick="zoomOut()" style="font-size:11px;padding:4px 10px">🔍−</button>
+          <button class="btn btn-sec" onclick="zoomReset()" style="font-size:11px;padding:4px 10px">适应</button>
+          <span style="font-size:11px;color:var(--muted);margin-left:4px" id="zoom_label">全部</span>
+        </div>
+      </div>
+
+      <div class="tag-list" id="tag_list"></div>
+
+      <div class="card-grid" style="margin-top:12px">
+        <div>
+          <label>⏩ 倍速</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="range" id="speed_slider" min="0.5" max="3" step="0.1" value="1" oninput="document.getElementById('speed_val').textContent=this.value+'x'">
+            <span id="speed_val" style="font-size:16px;font-weight:700;color:var(--accent);min-width:40px">1.0x</span>
+          </div>
+          <input type="number" id="speed_input" value="1" step="0.1" min="0.5" max="5" style="margin-top:4px;font-size:12px;padding:6px 10px" onchange="syncSpeed()">
+        </div>
+        <div style="display:flex;align-items:end">
+          <button class="btn btn-pri" id="btn_cut" onclick="doCut()" style="width:100%">✂️ 执行裁剪</button>
+        </div>
+      </div>
+
+      <!-- 精确秒数输入 + 切片播放 -->
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+        <label style="margin:0;white-space:nowrap;font-size:12px">⏱ 手动添加片段（秒）：</label>
+        <input type="number" id="seg_start_input" value="0" min="0" step="0.1" style="width:80px" placeholder="开始">
+        <span style="color:var(--muted);font-size:13px">~</span>
+        <input type="number" id="seg_end_input" value="3" min="0" step="0.1" style="width:80px" placeholder="结束">
+        <button class="btn btn-pri" onclick="addSegByInput()" style="font-size:12px;padding:6px 14px">➕ 添加</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-sec" onclick="playCurrentSeg()" id="btn_play_seg" style="font-size:12px;padding:6px 14px">▶ 播放切片</button>
+      </div>
+    </div>
+
+    <div class="card" id="card_cut_result" style="display:none">
+      <div class="card-title">✅ 裁剪完成</div>
+      <div class="card-sub" id="cut_result_info"></div>
+      <div class="actions">
+        <button class="btn btn-pri" onclick="goStep(2)">下一步 → 语音识别</button>
+        <button class="btn btn-sec" onclick="replayCut()">▶ 预览裁剪结果</button>
+      </div>
+    </div>
+
+    <div class="step-nav">
+      <div></div>
+      <button class="btn btn-pri" onclick="goStep(2)">下一步 → 语音识别</button>
+    </div>
+  </div>
+
+  <!-- =============================== -->
+  <!-- STEP 2: 语音识别                -->
+  <!-- =============================== -->
+  <div class="section" id="sec2">
+    <div class="card">
+      <div class="card-title">🎤 语音识别（ASR）</div>
+      <div class="card-sub">对裁剪后的视频进行 Whisper 转写</div>
+      <div class="card-grid">
+        <div><label>模型</label><select id="asr_model"><option value="base">base（快）</option><option value="small">small</option><option value="base" selected>base（快速，推荐）</option><option value="large">large（最准）</option></select></div>
+        <div><label>语言</label><select id="asr_lang"><option value="zh">中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option></select></div>
+      </div>
+      <div class="actions"><button class="btn btn-pri" id="btn_transcribe" onclick="doTranscribe()">🎙️ 开始转录</button></div>
+    </div>
+
+    <div class="card" id="card_transcribe_progress" style="display:none">
+      <div class="progress"><div class="progress-fill" id="tr_progress" style="width:0%"></div></div>
+      <div class="progress-msg" id="tr_msg"><span class="spinner"></span>等待开始…</div>
+    </div>
+
+    <div class="card" id="card_transcribe_result" style="display:none">
+      <div class="card-title">📝 转写结果</div>
+      <div class="card-sub" id="tr_summary"></div>
+      <div class="result-text" id="tr_text"></div>
+      <div class="actions">
+        <button class="btn btn-pri" onclick="goStep(3)">下一步 → 字幕设置</button>
+        <button class="btn btn-sec" onclick="goStep(1)">← 返回裁剪</button>
+      </div>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-sec" onclick="goStep(1)">← 上一步（裁剪）</button>
+      <button class="btn btn-pri" onclick="goStep(3)">下一步 → 字幕设置</button>
+    </div>
+  </div>
+
+  <!-- =============================== -->
+    <!-- STEP 3: 字幕设置 & 实时预览   -->
+  <!-- =============================== -->
+  <div class="section" id="sec3">
+    <div class="card">
+      <div class="card-title">📄 字幕设置</div>
+      <div class="card-sub">调整参数后自动更新预览（截图模式，即时反映）</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <label style="margin:0;white-space:nowrap">🎨 预设：</label>
+        <select onchange="applySubPreset(this.value)" style="width:auto;flex:1">
+          <option value="default">默认白字</option>
+          <option value="highlight">亮黄醒目</option>
+          <option value="elegant">雅致灰白</option>
+          <option value="game">游戏风格</option>
+          <option value="top">顶部字幕</option>
+        </select>
+      </div>
+      <div class="card-grid">
+        <div><label>字体大小</label><input type="number" id="sub_size" value="16" min="8" max="72" oninput="scheduleSubPreview()"></div>
+        <div><label>字体颜色</label><input type="color" id="sub_color" value="#FFFFFF" oninput="scheduleSubPreview()"></div>
+        <div><label>轮廓颜色</label><input type="color" id="sub_outline_color" value="#000000" oninput="scheduleSubPreview()"></div>
+        <div><label>轮廓宽度</label><div style="display:flex;gap:8px;align-items:center"><input type="range" id="sub_outline" min="0" max="3" step="0.1" value="0.85" oninput="this.nextElementSibling.textContent=this.value;scheduleSubPreview()"><span style="font-size:11px;color:var(--accent);min-width:24px">0.85</span></div></div>
+        <div><label>阴影深度</label><div style="display:flex;gap:8px;align-items:center"><input type="range" id="sub_shadow" min="0" max="3" step="0.1" value="0.55" oninput="this.nextElementSibling.textContent=this.value;scheduleSubPreview()"><span style="font-size:11px;color:var(--accent);min-width:24px">0.55</span></div></div>
+        <div><label>边距</label><input type="number" id="sub_margin" value="40" min="0" max="200" oninput="scheduleSubPreview()"></div>
+        <div><label>粗体</label><select id="sub_bold" onchange="scheduleSubPreview()"><option value="true" selected>开启</option><option value="false">关闭</option></select></div>
+        <div><label>斜体</label><select id="sub_italic" onchange="scheduleSubPreview()"><option value="false" selected>关闭</option><option value="true">开启</option></select></div>
+        <div><label>位置</label><select id="sub_align" onchange="scheduleSubPreview()"><option value="bl">左下角</option><option value="bc" selected>下方居中</option><option value="br">右下角</option><option value="tl">左上角</option><option value="tc">上方居中</option><option value="tr">右上角</option></select></div>
+        <div><label>截图时间（秒）</label><input type="number" id="sub_seek" value="3" min="0" max="9999" oninput="scheduleSubPreview()"></div>
+      </div>
+    </div>
+
+    <div class="card" id="card_sub_preview" style="display:block">
+      <div class="card-title">▶ 字幕预览</div>
+      <div class="card-sub">调整上方参数后自动刷新</div>
+      <div class="preview-box" style="display:flex;align-items:center;justify-content:center;background:#000;min-height:200px">
+        <img id="sub_preview_img" src="" style="max-width:100%;max-height:400px;display:none">
+        <div id="sub_preview_placeholder" style="color:var(--muted);font-size:14px">请先完成转录</div>
+      </div>
+      <div class="actions" style="margin-top:10px">
+        <button class="btn btn-sec" onclick="refreshSubPreview()" style="font-size:12px">🔄 刷新预览</button>
+      </div>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-sec" onclick="goStep(2)">← 上一步（转录）</button>
+      <button class="btn btn-pri" onclick="goStep(4)">下一步 → BGM 混音</button>
+    </div>
+  </div>
+
+<!-- STEP 4: BGM 混音               -->
+  <!-- =============================== -->
+  <div class="section" id="sec4">
+    <div class="card">
+      <div class="card-title">🎵 BGM 设置</div>
+      <div class="card-sub">指定 BGM 文件夹，选择背景音乐，调整音量比例</div>
+      <div class="card-grid">
+        <div>
+          <label>📂 BGM 文件夹路径</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="bgm_folder" placeholder="D:\music" value="D:\workspace">
+            <button class="btn btn-sec" onclick="scanBgm()" style="white-space:nowrap">扫描</button>
+          </div>
+        </div>
+        <div>
+          <label>🎶 选择 BGM</label>
+          <div class="file-list" id="bgm_list"><span style="color:var(--muted);font-size:12px">输入路径后点击扫描</span></div>
+          <input type="hidden" id="bgm_selected">
+        </div>
+      </div>
+      <div class="vol-group" style="margin-top:12px">
+        <div class="vol-item">
+          <label>🔊 原声</label>
+          <input type="range" id="vol_video" min="0" max="2" step="0.05" value="1" oninput="document.getElementById('vol_video_val').textContent=this.value">
+          <span class="val" id="vol_video_val">1.0</span>
+        </div>
+        <div class="vol-item">
+          <label>🎵 BGM</label>
+          <input type="range" id="vol_bgm" min="0" max="1" step="0.01" value="0.30" oninput="document.getElementById('vol_bgm_val').textContent=this.value">
+          <span class="val" id="vol_bgm_val">0.30</span>
+        </div>
+      </div>
+      <div class="card-grid" style="margin-top:12px">
+        <div><label>预览时长（秒）</label><input type="number" id="bgm_preview_dur" value="10" min="5" max="60"></div>
+        <div style="display:flex;align-items:end"><button class="btn btn-pri" id="btn_preview_bgm" onclick="doPreviewBgm()">👂 BGM 预览</button></div>
+      </div>
+    </div>
+
+    <div class="card" id="card_bgm_preview" style="display:none">
+      <div class="card-title">▶ BGM 预览</div>
+      <div class="card-sub">试听原声 + BGM 混音效果</div>
+      <div class="preview-box"><video id="bgm_preview_player" controls></video></div>
+      <div class="actions" style="margin-top:10px">
+        <button class="btn btn-pri" onclick="goStep(5)">下一步 → 导出</button>
+        <button class="btn btn-sec" onclick="goStep(3)">← 返回字幕</button>
+      </div>
+    </div>
+
+    <div class="card" id="card_bgm_progress" style="display:none">
+      <div class="progress"><div class="progress-fill" id="bgm_progress" style="width:0%"></div></div>
+      <div class="progress-msg" id="bgm_msg"><span class="spinner"></span>生成中…</div>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-sec" onclick="goStep(3)">← 上一步（字幕）</button>
+      <button class="btn btn-pri" onclick="goStep(5)">下一步 → 导出</button>
+    </div>
+  </div>
+
+  <!-- =============================== -->
+  <!-- STEP 5: 导出                   -->
+  <!-- =============================== -->
+  <div class="section" id="sec5">
+    <div class="card">
+      <div class="card-title">🚀 导出最终视频</div>
+      <div class="card-sub">确认所有参数后，开始完整导出</div>
+
+      <div style="background:rgba(0,0,0,.2);border-radius:12px;padding:14px;margin-bottom:14px;font-size:13px;line-height:2">
+        <div><span style="color:var(--muted)">✅ 裁剪片段：</span><span id="exp_segs">-</span></div>
+        <div><span style="color:var(--muted)">🎤 ASR 模型：</span><span id="exp_asr">-</span></div>
+        <div><span style="color:var(--muted)">⏩ 倍速：</span><span id="exp_speed">-</span></div>
+        <div><span style="color:var(--muted)">📄 字幕：</span><span id="exp_subs">-</span></div>
+        <div><span style="color:var(--muted)">🎵 BGM：</span><span id="exp_bgm">-</span></div>
+        <div><span style="color:var(--muted)">🔊 音量：</span><span id="exp_vol">-</span></div>
+        <div><span style="color:var(--muted)">📦 格式：</span><span id="exp_format">MP4</span></div>
+      </div>
+
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
+        <label style="margin:0;white-space:nowrap">导出格式：</label>
+        <select id="export_format" style="width:auto;flex:1">
+          <option value="mp4">MP4 视频（带字幕）</option>
+          <option value="mp3">MP3 音频（仅转写）</option>
+          <option value="gif">GIF 动图（无声音）</option>
+        </select>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-pri" id="btn_export" onclick="doExport()">📦 开始导出</button>
+        <button class="btn btn-sec" onclick="goStep(4)">← 返回 BGM 设置</button>
+      </div>
+    </div>
+
+    <div class="card" id="card_export_progress" style="display:none">
+      <div class="progress"><div class="progress-fill" id="exp_progress" style="width:0%"></div></div>
+      <div class="progress-msg" id="exp_msg"><span class="spinner"></span>导出中…</div>
+    </div>
+
+    <div class="card" id="card_export_result" style="display:none">
+      <div class="card-title">🎉 导出完成！</div>
+      <div class="card-sub" id="exp_result_info"></div>
+      <div class="actions">
+        <button class="btn btn-pri" onclick="resetAll()">🔄 处理下一个视频</button>
+        <button class="btn btn-sec" onclick="openOutputFolder()">📂 打开输出文件夹</button>
+      </div>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-sec" onclick="goStep(4)">← 上一步（BGM）</button>
+      <div></div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+// ── 全局状态 ──────────────────────────────────────
+const C = ['#00ff88','#00ccff','#8844ff','#ff8800','#ff4488','#44ff88','#4488ff','#ffcc00']
+let SEGS = [], DUR = 0, FN = '', CUT_PATH = '', CUT_AUDIO_PREVIEW = '', SRT_PATH = '', TRANS_TEXT = ''
+let POLL = null, WAVE_DATA = [], CUR_STEP = 1
+let AUDIO_PREVIEW = '', AUDIO_FALLBACK = false, _fallbackAudio = null, _audioEventsReady = false
+
+// ── 页面初始化 ──────────────────────────────────
+document.getElementById('file_input').onchange = uploadFile
+
+// 恢复上次的 BGM 文件夹路径
+const savedBgmFolder = localStorage.getItem('aiclip_bgm_folder')
+if (savedBgmFolder) {
+  document.getElementById('bgm_folder').value = savedBgmFolder
+}
+// 输入路径时自动保存
+document.getElementById('bgm_folder').onchange = function() {
+  localStorage.setItem('aiclip_bgm_folder', this.value)
+}
+
+// 启动时检查 Whisper 模型状态
+;(async function checkModels() {
+  try {
+    const r = await fetch('/api/status'); const d = await r.json()
+    const models = d.whisper_models || {}
+    const ok = Object.entries(models).filter(([n,i]) => i.status === 'ok').map(([n]) => n)
+    const bad = Object.entries(models).filter(([n,i]) => i.status !== 'ok')
+    const st = document.getElementById('step_info')
+    if (bad.length && !ok.length) {
+      st.innerHTML = '⚠️ Whisper 模型未就绪，请先下载。在下方 Step 2 中选择模型后会自动下载，或点击 <b>下载 base 模型</b> 按钮'
+    } else if (bad.length) {
+      st.textContent = 'Whisper: ' + ok.join(',') + ' 就绪 | ' + bad.map(([n]) => n).join(',') + ' 需下载'
+    } else {
+      st.textContent = 'Whisper 模型就绪: ' + ok.join(', ') + ' | 上传视频开始'
+    }
+  } catch(e) { console.log('模型状态检查失败:', e) }
+})()
+
+async function downloadModel(name) {
+  const st = document.getElementById('step_info')
+  st.innerHTML = '<span class="spinner"></span> 正在下载 ' + name + ' 模型…'
+  try {
+    const fd = new FormData(); fd.append('model', name)
+    const r = await fetch('/api/models/prepare', {method:'POST', body:fd}); const d = await r.json()
+    if (d.task_id) {
+      const p = setInterval(async () => {
+        const tr = await fetch('/api/task/' + d.task_id); const t = await tr.json()
+        if (t.status === 'completed') {
+          clearInterval(p); st.textContent = '✅ ' + name + ' 模型就绪！上传视频开始'
+        } else if (t.status === 'error') {
+          clearInterval(p); st.textContent = '❌ 下载失败: ' + (t.error || '')
+        } else {
+          st.innerHTML = '<span class="spinner"></span> 下载 ' + name + ' 模型… ' + (t.progress || 0) + '%'
+        }
+      }, 1500)
+    }
+  } catch(e) { st.textContent = '❌ 请求失败: ' + e.message }
+}
+const dz = document.getElementById('drop_zone')
+dz.onclick = () => document.getElementById('file_input').click()
+dz.ondragover = e => { e.preventDefault(); dz.classList.add('dragover') }
+dz.ondragleave = () => dz.classList.remove('dragover')
+dz.ondrop = e => {
+  e.preventDefault(); dz.classList.remove('dragover')
+  if (e.dataTransfer.files.length) {
+    document.getElementById('file_input').files = e.dataTransfer.files; uploadFile()
+  }
+}
+
+// 速度同步
+function syncSpeed() {
+  const inp = document.getElementById('speed_input'), sl = document.getElementById('speed_slider')
+  const v = parseFloat(inp.value) || 1
+  sl.value = Math.max(0.5, Math.min(3, v))
+  document.getElementById('speed_val').textContent = sl.value + 'x'
+  inp.value = sl.value
+}
+document.getElementById('speed_slider').oninput = function() {
+  document.getElementById('speed_val').textContent = this.value + 'x'
+  document.getElementById('speed_input').value = this.value
+}
+
+// ── 步骤切换 ──────────────────────────────────
+function goStep(n) {
+  CUR_STEP = n
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'))
+  document.getElementById('sec' + n).classList.add('active')
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'))
+  document.querySelector(`.step[data-s="${n}"]`).classList.add('active')
+  document.getElementById('sec' + n).scrollIntoView({behavior:'smooth', block:'start'})
+
+  const msgs = {1:'选择片段后点击裁剪', 2:'对裁剪结果进行语音识别', 3:'调整字幕样式并预览', 4:'选择 BGM 调整混音', 5:'确认参数后导出'}
+  document.getElementById('step_info').textContent = msgs[n] || ''
+
+  if (n === 5) {
+    updateExportSummary()
+  } else if (n === 3) {
+    // 进入字幕设置步骤时自动触发预览
+    setTimeout(scheduleSubPreview, 100)
+  }
+}
+
+// ── 上传 ──────────────────────────────────────
+async function uploadFile() {
+  const inp = document.getElementById('file_input')
+  if (!inp.files.length) return
+  const file = inp.files[0]
+  const fd = new FormData(); fd.append('file', file)
+  const progressCard = document.getElementById('card_upload_progress')
+  const progressFill = document.getElementById('upload_progress')
+  const progressMsg = document.getElementById('upload_msg')
+  const progressPct = document.getElementById('upload_percent')
+  const progressName = document.getElementById('upload_file_name')
+
+  progressCard.style.display = ''
+  progressFill.style.width = '0%'
+  progressPct.textContent = '0%'
+  progressName.textContent = file.name + ' · ' + (file.size / 1024 / 1024).toFixed(1) + ' MB'
+  progressMsg.innerHTML = '<span class="spinner"></span>正在上传视频…'
+  document.getElementById('card_timeline').style.display = 'none'
+  SEGS = []
+  renderSegs()
+  localStorage.removeItem('aiclip_state')
+  clearAudioFallback()
+
+  try {
+    const d = await uploadWithProgress(fd, percent => {
+      const capped = Math.min(92, Math.max(1, Math.round(percent * 0.92)))
+      progressFill.style.width = capped + '%'
+      progressPct.textContent = capped + '%'
+      progressMsg.innerHTML = '<span class="spinner"></span>正在上传视频…'
+      if (percent >= 100) {
+        progressFill.style.width = '96%'
+        progressPct.textContent = '96%'
+        progressMsg.innerHTML = '<span class="spinner"></span>上传完成，正在检查并转换音视频兼容性…'
+      }
+    })
+
+    FN = d.filename; DUR = d.duration || 0
+    progressFill.style.width = '100%'
+    progressPct.textContent = '100%'
+    progressMsg.textContent = '上传完成，视频已准备好'
+    setTimeout(() => { progressCard.style.display = 'none' }, 800)
+
+    document.getElementById('card_timeline').style.display = ''
+    document.getElementById('wt_end').textContent = d.duration_str
+    const v = document.getElementById('player')
+    v.muted = false
+    v.volume = 1.0
+    // 加 ?t= 时间戳防止浏览器缓存旧版（无音频的版本）
+    v.src = '/api/video/' + encodeURIComponent(FN) + '?t=' + Date.now()
+    v.load()
+    setupAudioFallback(d.audio_preview_filename || '')
+
+    // 显示音频诊断信息
+    if (!d.has_audio) {
+      clearAudioFallback()
+      document.getElementById('clip_info').innerHTML = '<span style="color:#ff5050">⚠️ 该视频没有音轨</span>'
+      setAudioFallbackStatus('该视频没有内置音轨。可以选择一个外挂音频，播放/拖动视频时会同步声音。 <button class="btn btn-sec" style="font-size:12px;padding:4px 10px;margin-left:8px" onclick="pickExternalAudio()">选择外挂音频</button>')
+    } else {
+      const ac = d.audio_codec || 'unknown'
+      const vc = d.video_codec || 'unknown'
+      const fromAudio = d.original_audio_codec || ac
+      const fromVideo = d.original_video_codec || vc
+      const convNote = d.audio_converted ? '（已标准化为 H.264/AAC，原始 ' + fromVideo + '/' + fromAudio + '）' : ''
+      const icon = d.compat_ok ? '✅' : '⚠️'
+      const fallbackNote = d.audio_preview_ok ? ' · 独立音轨兜底已启用' : ''
+      document.getElementById('clip_info').textContent = '0 个片段 · 视频: ' + vc + ' · 音频: ' + ac + ' ' + icon + ' ' + convNote + fallbackNote
+      if (d.compat_error) {
+        document.getElementById('clip_info').textContent += ' [兼容处理失败: ' + d.compat_error + ']'
+      } else if (d.audio_preview_error) {
+        document.getElementById('clip_info').textContent += ' [独立音轨生成失败: ' + d.audio_preview_error + ']'
+      }
+    }
+    v.ontimeupdate = () => {
+      document.getElementById('wt_start').textContent = formatTime(v.currentTime)
+      drawPlayhead(v.currentTime / (DUR || 1))
+    }
+    document.getElementById('card_timeline').scrollIntoView({behavior:'smooth'})
+    loadWaveform()
+  } catch(e) {
+    progressFill.style.width = '0%'
+    progressPct.textContent = '失败'
+    progressMsg.textContent = '上传失败: ' + e.message
+    alert('上传失败: ' + e.message)
+  }
+}
+
+function uploadWithProgress(formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/upload')
+    xhr.upload.onprogress = event => {
+      if (!event.lengthComputable) return
+      onProgress(Math.round((event.loaded / event.total) * 100))
+    }
+    xhr.onerror = () => reject(new Error('网络连接失败'))
+    xhr.onload = () => {
+      let data = {}
+      try { data = JSON.parse(xhr.responseText || '{}') }
+      catch(e) { return reject(new Error('服务器返回内容无法解析')) }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        return reject(new Error(data.error || ('服务器错误 ' + xhr.status)))
+      }
+      resolve(data)
+    }
+    xhr.send(formData)
+  })
+}
+
+function getFallbackAudio() {
+  if (_fallbackAudio) return _fallbackAudio
+  _fallbackAudio = document.createElement('audio')
+  _fallbackAudio.id = 'fallback_audio'
+  _fallbackAudio.preload = 'auto'
+  _fallbackAudio.style.display = 'none'
+  document.body.appendChild(_fallbackAudio)
+  return _fallbackAudio
+}
+
+function setupAudioFallback(filename) {
+  clearAudioFallback()
+  if (!filename) return
+
+  const player = document.getElementById('player')
+  const audio = getFallbackAudio()
+  AUDIO_PREVIEW = filename
+  AUDIO_FALLBACK = true
+  audio.src = '/api/video/' + encodeURIComponent(filename) + '?t=' + Date.now()
+  audio.volume = 1
+  audio.muted = false
+  audio.load()
+
+  // 防止原 video 内嵌音轨和独立音轨同时出声。
+  player.muted = true
+  attachAudioFallbackEvents()
+  setAudioFallbackStatus('音频修复模式已启用：画面来自视频文件，声音来自独立音轨。')
+}
+
+function setupExternalAudio(file) {
+  clearAudioFallback()
+  const player = document.getElementById('player')
+  const audio = getFallbackAudio()
+  AUDIO_PREVIEW = URL.createObjectURL(file)
+  AUDIO_FALLBACK = true
+  audio.src = AUDIO_PREVIEW
+  audio.volume = 1
+  audio.muted = false
+  audio.load()
+  player.muted = true
+  attachAudioFallbackEvents()
+  setAudioFallbackStatus('外挂音频已启用：播放、暂停、拖动视频时会同步这条音频。')
+}
+
+function pickExternalAudio() {
+  document.getElementById('external_audio_input').click()
+}
+
+document.getElementById('external_audio_input').addEventListener('change', function() {
+  if (this.files && this.files[0]) setupExternalAudio(this.files[0])
+})
+
+function clearAudioFallback() {
+  if (AUDIO_PREVIEW && AUDIO_PREVIEW.startsWith('blob:')) URL.revokeObjectURL(AUDIO_PREVIEW)
+  AUDIO_PREVIEW = ''
+  AUDIO_FALLBACK = false
+  const st = document.getElementById('audio_fallback_status')
+  if (st) st.style.display = 'none'
+  if (_fallbackAudio) {
+    _fallbackAudio.pause()
+    _fallbackAudio.removeAttribute('src')
+    _fallbackAudio.load()
+  }
+  const player = document.getElementById('player')
+  if (player) player.muted = false
+}
+
+function setAudioFallbackStatus(text, isError=false) {
+  const st = document.getElementById('audio_fallback_status')
+  if (!st) return
+  st.style.display = text ? '' : 'none'
+  st.style.color = isError ? '#ffcc00' : 'var(--cyan)'
+  st.innerHTML = text || ''
+}
+
+function attachAudioFallbackEvents() {
+  if (_audioEventsReady) return
+  _audioEventsReady = true
+  const player = document.getElementById('player')
+
+  const syncAudioTime = (force=false) => {
+    if (!AUDIO_FALLBACK || !_fallbackAudio) return
+    const drift = Math.abs((_fallbackAudio.currentTime || 0) - (player.currentTime || 0))
+    if (force || drift > 0.25) _fallbackAudio.currentTime = player.currentTime || 0
+    _fallbackAudio.playbackRate = player.playbackRate || 1
+  }
+
+  player.addEventListener('play', async () => {
+    if (!AUDIO_FALLBACK || !_fallbackAudio) return
+    syncAudioTime(true)
+    try {
+      await _fallbackAudio.play()
+      setAudioFallbackStatus('音频修复模式已启用：画面来自视频文件，声音来自独立音轨。')
+    } catch(e) {
+      setAudioFallbackStatus('音频修复模式已准备好；如果没有声音，请暂停后再点击播放一次。', true)
+    }
+  })
+  player.addEventListener('pause', () => {
+    if (AUDIO_FALLBACK && _fallbackAudio) _fallbackAudio.pause()
+  })
+  player.addEventListener('seeking', () => syncAudioTime(true))
+  player.addEventListener('seeked', () => syncAudioTime(true))
+  player.addEventListener('ratechange', () => syncAudioTime(false))
+  player.addEventListener('timeupdate', () => syncAudioTime(false))
+  player.addEventListener('ended', () => {
+    if (AUDIO_FALLBACK && _fallbackAudio) _fallbackAudio.pause()
+  })
+}
+
+// ── 波形 ──────────────────────────────────────
+async function loadWaveform() {
+  try {
+    const r = await fetch('/api/waveform/' + encodeURIComponent(FN))
+    const d = await r.json()
+    WAVE_DATA = d.waveform || []
+  } catch(e) { WAVE_DATA = [] }
+  drawWaveform()
+}
+
+function drawWaveform() {
+  const c = document.getElementById('wave_canvas'), ctx = c.getContext('2d')
+  const rect = c.parentElement.getBoundingClientRect()
+  c.width = c.clientWidth || rect.width || 600
+  c.height = c.clientHeight || 80
+  const w = c.width, h = c.height
+  ctx.clearRect(0, 0, w, h)
+  if (!DUR || DUR <= 0) return
+
+  const visibleDur = getVisibleDuration()
+  const win = getWinRange()
+
+  // 背景网格（每格 1 秒）
+  ctx.strokeStyle = 'rgba(80,180,255,.05)'; ctx.lineWidth = 1
+  for (let t = Math.ceil(win.winStart); t <= win.winEnd; t++) {
+    const x = ((t - win.winStart) / (win.winEnd - win.winStart)) * w
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
+  }
+
+  if (WAVE_DATA.length) {
+    const n = WAVE_DATA.length
+    const startIdx = Math.max(0, Math.floor((win.winStart / DUR) * n))
+    const endIdx = Math.min(n, Math.ceil((win.winEnd / DUR) * n))
+    const chunk = WAVE_DATA.slice(startIdx, endIdx)
+    const step = Math.max(1, Math.floor(chunk.length / w))
+
+    ctx.beginPath(); ctx.strokeStyle = 'rgba(0,255,136,.35)'; ctx.lineWidth = 1.5
+    for (let x = 0; x < w; x++) {
+      const idx = Math.min(Math.floor(x * step), chunk.length - 1)
+      const amp = chunk[idx] || 0
+      const y = h/2 - amp * (h/2 - 4)
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+    ctx.beginPath(); ctx.strokeStyle = 'rgba(0,255,136,.35)'
+    for (let x = 0; x < w; x++) {
+      const idx = Math.min(Math.floor(x * step), chunk.length - 1)
+      const amp = chunk[idx] || 0
+      const y = h/2 + amp * (h/2 - 4)
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+  }
+
+  // 时间刻度
+  ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.font = '10px sans-serif'
+  const tickInt = visibleDur <= 10 ? 1 : visibleDur <= 30 ? 5 : 10
+  for (let t = Math.ceil(win.winStart / tickInt) * tickInt; t <= win.winEnd; t += tickInt) {
+    const x = ((t - win.winStart) / (win.winEnd - win.winStart)) * w
+    ctx.fillText(formatTime(t), x + 3, h - 4)
+  }
+
+  // Playhead
+  if (_playPct) {
+    const playTime = _playPct * DUR
+    if (playTime >= win.winStart && playTime <= win.winEnd) {
+      const phx = ((playTime - win.winStart) / (win.winEnd - win.winStart)) * w
+      ctx.beginPath(); ctx.strokeStyle = '#00ff88'; ctx.lineWidth = 2
+      ctx.moveTo(phx, 0); ctx.lineTo(phx, h); ctx.stroke()
+    }
+  }
+}
+
+function drawPlayhead(pct) {
+  _playPct = pct
+  drawWaveform()
+}
+
+// ── 波形缩放 ──────────────────────────────────
+let _zoomLevel = 0
+const ZOOM_STEPS = [1, 2, 5, 10, 30, 60]  // 显示的总秒数范围
+
+// 获取当前缩放视野的时间范围
+function getWinRange() {
+  const visibleDur = getVisibleDuration()
+  const centerT = Math.max(0, Math.min(DUR || 1, (_playPct || 0) * (DUR || 1)))
+  const halfVis = visibleDur / 2
+  const winStart = Math.max(0, Math.min((DUR || 1) - visibleDur, centerT - halfVis))
+  const winEnd = Math.min(DUR || 1, winStart + visibleDur)
+  return { winStart, winEnd, visibleDur }
+}
+
+function getVisibleDuration() {
+  if (_zoomLevel === 0) return DUR || 60
+  const z = ZOOM_STEPS[Math.min(_zoomLevel - 1, ZOOM_STEPS.length - 1)]
+  return Math.min(DUR, z)
+}
+
+function updateZoomLabel() {
+  const el = document.getElementById('zoom_label')
+  if (!el) return
+  const d = getVisibleDuration()
+  if (_zoomLevel === 0 || d >= DUR) el.textContent = '全部'
+  else el.textContent = formatTime(0) + '~' + formatTime(d)
+}
+
+function zoomIn() {
+  if (_zoomLevel < ZOOM_STEPS.length - 1) {
+    _zoomLevel++
+    updateZoomLabel()
+    drawWaveform()
+    renderSegs()
+  }
+}
+
+function zoomOut() {
+  if (_zoomLevel > 0) {
+    _zoomLevel--
+    drawWaveform()
+    renderSegs()
+  }
+}
+
+function zoomReset() {
+  _zoomLevel = 0
+  updateZoomLabel()
+  drawWaveform()
+  renderSegs()
+}
+
+// ── 片段管理 ──────────────────────────────────
+let _drag = null, _sid = 0
+
+// 统一 canvas 鼠标交互
+const _canvas = document.getElementById('wave_canvas')
+_canvas.onmousedown = e => {
+  const rect = _canvas.getBoundingClientRect()
+  if (!rect.width || !DUR) return  // 还没就绪
+  const win = getWinRange()
+  const pct = (e.clientX - rect.left) / rect.width
+  const time = Math.max(win.winStart, Math.min(win.winEnd, win.winStart + pct * (win.winEnd - win.winStart)))
+
+  // 点击即跳转视频到对应位置（让用户看到当前点在哪）
+  document.getElementById('player').currentTime = time
+
+  // 检查是否点在已有片段上 → 跳转后不创建
+  for (const s of SEGS) {
+    if (time >= s.s && time <= s.e) {
+      return  // 点击已有片段，不触发 _drag
+    }
+  }
+  // 空白区域 → 开始创建
+  _drag = {mode:'create', x:e.clientX, t:time, rect}
+}
+
+document.addEventListener('mousemove', e => {
+  if (!_drag) return
+  const win2 = getWinRange()
+  const pct = (_drag.rect.width > 0) ? (e.clientX - _drag.rect.left) / _drag.rect.width : 0
+  const t = Math.max(win2.winStart, Math.min(win2.winEnd, win2.winStart + pct * (win2.winEnd - win2.winStart)))
+
+  if (_drag.mode === 'create') {
+    // 拖拽中实时跳转视频画面，让用户看到当前位置
+    document.getElementById('player').currentTime = t
+    return
+  }
+  if (_drag.mode === 'resize') {
+    const seg = SEGS.find(s => s.id === _drag.sid)
+    if (!seg) return
+    if (_drag.side === 'l') seg.s = Math.max(0, Math.min(t, seg.e - 0.5))
+    else seg.e = Math.min(DUR, Math.max(t, seg.s + 0.5))
+    seg.s = Math.round(seg.s * 10) / 10
+    seg.e = Math.round(seg.e * 10) / 10
+    renderSegs()
+  }
+})
+
+document.addEventListener('mouseup', e => {
+  if (!_drag) return
+  if (_drag.mode === 'create') {
+    const win3 = getWinRange()
+    const pct = (_drag.rect.width > 0) ? (e.clientX - _drag.rect.left) / _drag.rect.width : 0
+    const t = Math.max(win3.winStart, Math.min(win3.winEnd, win3.winStart + pct * (win3.winEnd - win3.winStart)))
+    const dx = Math.abs(e.clientX - _drag.x)
+    let s_start, s_end
+    if (dx > 8) {
+      // 拖拽创建（带 snap 吸附）
+      s_start = snapTime(Math.max(0, Math.min(_drag.t, t)))
+      s_end = snapTime(Math.min(DUR, Math.max(_drag.t, t)))
+    } else {
+      // 点击创建（3秒片段，带 snap）
+      s_start = snapTime(Math.max(0, _drag.t - 1.5))
+      s_end = snapTime(Math.min(DUR, _drag.t + 1.5))
+    }
+    if (s_end - s_start >= 0.5) addSeg(s_start, s_end)
+  }
+  _drag = null
+})
+
+function addSeg(s, e) {
+  const id = ++_sid
+  SEGS.push({id, s:Math.round(s*10)/10, e:Math.round(e*10)/10})
+  SEGS.sort((a,b) => a.s - b.s)
+  renderSegs()
+}
+
+function rmSeg(id) { SEGS = SEGS.filter(x => x.id !== id); renderSegs() }
+
+function clearSegs() { if (SEGS.length) { SEGS = []; renderSegs() } }
+
+// 手动输入秒数添加片段
+function addSegByInput() {
+  const s = parseFloat(document.getElementById('seg_start_input').value)
+  const e = parseFloat(document.getElementById('seg_end_input').value)
+  if (isNaN(s) || isNaN(e) || s < 0 || e < 0) { alert('请输入有效的时间（秒）'); return }
+  if (s >= e) { alert('结束时间必须大于开始时间'); return }
+  if (DUR && e > DUR) { alert('结束时间超过视频长度（' + DUR.toFixed(1) + ' 秒）'); return }
+  addSeg(s, e)
+  // 跳转到该片段
+  document.getElementById('player').currentTime = s
+}
+
+// 播放当前选中的切片（只播片段范围）
+function playCurrentSeg() {
+  const player = document.getElementById('player')
+  const ct = player.currentTime
+  const seg = SEGS.find(s => ct >= s.s && ct <= s.e)
+  if (!seg) {
+    // 没有当前片段 → 播第一个
+    if (!SEGS.length) { alert('请先创建片段'); return }
+    const first = SEGS[0]
+    player.currentTime = first.s
+    player.play()
+    // 在 timeupdate 里自动停止
+    _stopAt = first.e
+    return
+  }
+  player.currentTime = seg.s
+  player.play()
+  _stopAt = seg.e
+}
+let _stopAt = 0
+
+// 监听 timeupdate 实现切片自动停止
+document.getElementById('player').addEventListener('timeupdate', function() {
+  if (_stopAt > 0 && this.currentTime >= _stopAt) {
+    this.pause()
+    _stopAt = 0
+  }
+})
+
+// 波形滚轮缩放
+document.getElementById('wave_canvas').addEventListener('wheel', function(e) {
+  e.preventDefault()
+  if (e.deltaY < 0) zoomIn()
+  else zoomOut()
+}, {passive: false})
+
+function renderSegs() {
+  const container = document.getElementById('wave_segs')
+  container.innerHTML = ''
+  if (!DUR || DUR <= 0) {
+    document.getElementById('tag_list').innerHTML = '<span style="color:var(--muted);font-size:12px">请先上传视频</span>'
+    return
+  }
+  const win = getWinRange()
+  const visDur = Math.max(0.1, win.winEnd - win.winStart)
+  SEGS.forEach((seg, i) => {
+    // 相对视野计算位置（支持缩放）
+    const segStart = Math.max(win.winStart, Math.min(win.winEnd, seg.s))
+    const segEnd = Math.max(win.winStart, Math.min(win.winEnd, seg.e))
+    const l = ((segStart - win.winStart) / visDur) * 100
+    const w = ((segEnd - segStart) / visDur) * 100
+    const c = C[i % C.length]
+    // 完全不在视野内则隐藏
+    if (seg.e < win.winStart || seg.s > win.winEnd) return
+    const el = document.createElement('div')
+    el.className = 'wseg'
+    el.dataset.id = seg.id
+    el.style.cssText = `left:${l}%;width:${Math.max(w,1.5)}%;background:${c}`
+    el.innerHTML = `<div class="handle l"></div><span style="text-shadow:0 1px 4px rgba(0,0,0,.6)">${formatTime(seg.s)}</span><div class="del" onclick="event.stopPropagation();rmSeg(${seg.id})">✕</div><div class="handle r"></div>`
+    container.appendChild(el)
+
+    // Handles
+    el.querySelector('.handle.l').onmousedown = e => {
+      e.stopPropagation(); _drag = {mode:'resize', sid:seg.id, side:'l', rect:e.currentTarget.parentElement.parentElement.getBoundingClientRect()}
+    }
+    el.querySelector('.handle.r').onmousedown = e => {
+      e.stopPropagation(); _drag = {mode:'resize', sid:seg.id, side:'r', rect:e.currentTarget.parentElement.parentElement.getBoundingClientRect()}
+    }
+    el.onclick = e => { if (e.target === el) document.getElementById('player').currentTime = seg.s }
+  })
+
+  // Tags with thumbnails
+  const list = document.getElementById('tag_list')
+  list.innerHTML = SEGS.length
+    ? SEGS.map((s,i) => `<span class="tag" style="background:${C[i%C]};display:inline-flex;align-items:center;gap:6px" onclick="document.getElementById('player').currentTime=${s.s}">
+        <img data-seg="${s.id}" style="width:40px;height:22.5px;border-radius:4px;object-fit:cover;background:rgba(0,0,0,.3)" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+        #${i+1} ${formatTime(s.s)}~${formatTime(s.e)}
+        <span class="x" onclick="event.stopPropagation();rmSeg(${s.id})">✕</span>
+      </span>`).join('')
+    : '<span style="color:var(--muted);font-size:12px">在波形上点击或拖拽创建片段</span>'
+
+  // 延迟加载缩略图
+  setTimeout(() => {
+    SEGS.forEach(s => {
+      const img = list.querySelector(`img[data-seg="${s.id}"]`)
+      if (img && CUT_PATH) {
+        img.src = '/api/thumbnail?video=' + encodeURIComponent(CUT_PATH) + '&time=' + s.s + '&t=' + Date.now()
+      }
+    })
+  }, 200)
+
+  document.getElementById('clip_info').textContent = SEGS.length + ' 个片段'
+}
+
+// ── Step 1: 裁剪 ─────────────────────────────
+let _cutTaskId = null
+
+async function doCut() {
+  if (!SEGS.length) { alert('请选择至少一个片段'); return }
+  const btn = document.getElementById('btn_cut'); btn.disabled = true; btn.textContent = '裁剪中…'
+
+  const segStr = SEGS.map(s => `${s.s}-${s.e}`).join(',')
+  const speed = parseFloat(document.getElementById('speed_input').value) || 1
+
+  const fd = new FormData()
+  fd.append('filename', FN); fd.append('segments', segStr); fd.append('speed', speed)
+
+  try {
+    const r = await fetch('/api/cut', {method:'POST', body:fd}); const d = await r.json()
+    if (d.task_id) { _cutTaskId = d.task_id; pollCut(d.task_id) }
+    else alert(d.error || '失败')
+  } catch(e) { alert(e.message) }
+  btn.disabled = false; btn.textContent = '✂️ 执行裁剪'
+}
+
+function pollCut(tid) {
+  const p = setInterval(async () => {
+    try {
+      const r = await fetch('/api/task/' + tid); const t = await r.json()
+      if (t.status === 'completed') {
+        clearInterval(p)
+        CUT_PATH = t.result.cut_path
+        CUT_AUDIO_PREVIEW = t.result.audio_preview_filename || ''
+        document.getElementById('card_cut_result').style.display = ''
+        const audioNote = t.result.audio_preview_ok ? '，独立音轨兜底已生成' : ''
+        document.getElementById('cut_result_info').textContent = `裁剪完成：${t.result.duration_str}，共 ${SEGS.length} 个片段${audioNote}`
+        document.getElementById('card_cut_result').scrollIntoView({behavior:'smooth'})
+        // Mark step done
+        document.querySelector('.step[data-s="1"]').classList.add('done')
+        goStep(2)
+      } else if (t.status === 'error') {
+        clearInterval(p); alert('裁剪失败: ' + (t.error || ''))
+      }
+    } catch(e) { clearInterval(p) }
+  }, 1000)
+}
+
+function replayCut() {
+  if (CUT_PATH) {
+    const v = document.getElementById('player')
+    v.src = '/api/video/' + encodeURIComponent(CUT_PATH.split('\\').pop() || CUT_PATH.split('/').pop())
+    v.load()
+    setupAudioFallback(CUT_AUDIO_PREVIEW)
+    v.play()
+  }
+}
+
+// ── Step 2: 转录 ─────────────────────────────
+let _trTaskId = null
+
+async function doTranscribe() {
+  if (!CUT_PATH) { alert('请先完成裁剪'); return }
+  const btn = document.getElementById('btn_transcribe'); btn.disabled = true; btn.textContent = '转录中…'
+
+  const fd = new FormData()
+  fd.append('video_path', CUT_PATH)
+  fd.append('asr_model', document.getElementById('asr_model').value)
+  fd.append('language', document.getElementById('asr_lang').value)
+
+  try {
+    const r = await fetch('/api/transcribe', {method:'POST', body:fd}); const d = await r.json()
+    if (d.task_id) {
+      _trTaskId = d.task_id
+      document.getElementById('card_transcribe_progress').style.display = ''
+      pollTranscribe(d.task_id)
+    } else alert(d.error || '失败')
+  } catch(e) { alert(e.message) }
+  btn.disabled = false; btn.textContent = '🎙️ 开始转录'
+}
+
+function pollTranscribe(tid) {
+  const p = setInterval(async () => {
+    try {
+      const r = await fetch('/api/task/' + tid); const t = await r.json()
+      document.getElementById('tr_progress').style.width = (t.progress || 0) + '%'
+      document.getElementById('tr_msg').innerHTML = `<span class="spinner"></span>${escHtml(t.message || '')}`
+
+      if (t.status === 'completed') {
+        clearInterval(p)
+        document.getElementById('card_transcribe_progress').style.display = 'none'
+        document.getElementById('card_transcribe_result').style.display = ''
+        SRT_PATH = t.result.srt_path || ''
+        TRANS_TEXT = t.result.transcript || ''
+        document.getElementById('tr_summary').textContent = `共 ${t.result.segments_count} 条字幕片段`
+        document.getElementById('tr_text').textContent = TRANS_TEXT
+        document.getElementById('card_transcribe_result').scrollIntoView({behavior:'smooth'})
+        document.querySelector('.step[data-s="2"]').classList.add('done')
+        // 转录完成后自动加载字幕预览
+        setTimeout(() => scheduleSubPreview(), 500)
+      } else if (t.status === 'error') {
+        clearInterval(p)
+        document.getElementById('tr_msg').innerHTML = '❌ ' + escHtml(t.error || '')
+      }
+    } catch(e) { clearInterval(p) }
+  }, 1000)
+}
+
+// ── Step 3: 字幕实时预览（截图模式） ─────────
+let _subPreviewTimer = null
+
+// 防抖：参数变化后 600ms 自动刷新
+function scheduleSubPreview() {
+  const ph = document.getElementById('sub_preview_placeholder')
+  const img = document.getElementById('sub_preview_img')
+
+  if (!CUT_PATH) {
+    ph.textContent = '⏳ 请先完成视频裁剪（Step 1）'
+    img.style.display = 'none'
+    return
+  }
+  if (!SRT_PATH) {
+    ph.textContent = '⏳ 请先完成语音识别（Step 2）'
+    img.style.display = 'none'
+    return
+  }
+
+  if (_subPreviewTimer) clearTimeout(_subPreviewTimer)
+  _subPreviewTimer = setTimeout(refreshSubPreview, 600)
+}
+
+async function refreshSubPreview() {
+  if (!CUT_PATH || !SRT_PATH) return
+
+  const img = document.getElementById('sub_preview_img')
+  const ph = document.getElementById('sub_preview_placeholder')
+
+  // 显示加载
+  ph.textContent = '刷新中…'
+  img.style.display = 'none'
+
+  const fd = new FormData()
+  fd.append('video_path', CUT_PATH)
+  fd.append('srt_path', SRT_PATH)
+  fd.append('font_size', document.getElementById('sub_size').value || 16)
+  fd.append('font_color', document.getElementById('sub_color').value || '#FFFFFF')
+  fd.append('outline_color', document.getElementById('sub_outline_color').value || '#000000')
+  fd.append('outline_width', document.getElementById('sub_outline').value || 0.85)
+  fd.append('shadow_depth', document.getElementById('sub_shadow').value || 0.55)
+  fd.append('bold', document.getElementById('sub_bold').value === 'true')
+  fd.append('italic', document.getElementById('sub_italic').value === 'true')
+  fd.append('alignment', document.getElementById('sub_align').value || 'bc')
+  fd.append('margin_v', document.getElementById('sub_margin').value || 40)
+  fd.append('seek_time', document.getElementById('sub_seek').value || 3)
+
+  try {
+    // 直接请求图片（不再用 task 轮询）
+    const params = new URLSearchParams()
+    for (const [k, v] of fd.entries()) params.append(k, v)
+    
+    const r = await fetch('/api/preview-subs', {method:'POST', body:fd})
+    if (!r.ok) {
+      const errData = await r.json().catch(() => ({}))
+      ph.textContent = '❌ ' + (errData.error || '渲染失败')
+      return
+    }
+
+    // 返回的是图片二进制 → 转为 blob URL
+    const blob = await r.blob()
+    const url = URL.createObjectURL(blob)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      // 标记步骤已完成
+      document.querySelector('.step[data-s="3"]')?.classList.add('done')
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      img.style.display = 'none'
+      ph.textContent = '❌ 图片解码失败，请检查字幕文件内容'
+    }
+    img.src = url
+    img.style.display = 'block'
+    ph.textContent = ''
+  } catch(e) {
+    ph.textContent = '❌ ' + e.message
+  }
+}
+
+// ── Step 4: BGM ──────────────────────────────
+let _bgmFile = '', _bgmTaskId = null
+
+async function scanBgm() {
+  const folder = document.getElementById('bgm_folder').value.trim()
+  if (!folder) { alert('输入 BGM 文件夹路径'); return }
+  try {
+    const r = await fetch('/api/scan-bgm?folder=' + encodeURIComponent(folder))
+    const d = await r.json()
+    const list = document.getElementById('bgm_list')
+    if (!d.files || !d.files.length) {
+      list.innerHTML = '<span style="color:var(--muted);font-size:12px">未找到 MP3 文件</span>'
+      return
+    }
+    list.innerHTML = d.files.map(f =>
+      `<div class="file-item" data-path="${escHtml(f.path)}">
+        <span>🎵 ${escHtml(f.name)}</span>
+        <span style="color:var(--muted);font-size:11px">${f.size ? (f.size/1024/1024).toFixed(1) + ' MB' : ''}</span>
+      </div>`
+    ).join('')
+  } catch(e) { alert('扫描失败: ' + e.message) }
+}
+
+// 用事件委托统一处理 BGM 列表点击（避免 onclick 中 JS 转义吃掉反斜杠）
+document.getElementById('bgm_list').addEventListener('click', function(e) {
+  const item = e.target.closest('.file-item')
+  if (!item) return
+  const path = item.dataset.path
+  selectBgm(item, path)
+})
+
+function selectBgm(el, path) {
+  document.querySelectorAll('.file-item').forEach(x => x.classList.remove('sel'))
+  el.classList.add('sel')
+  _bgmFile = path
+  document.getElementById('bgm_selected').value = path
+  // 打印确认路径正确
+  console.log('[BGM] 已选择:', path)
+}
+
+async function doPreviewBgm() {
+  if (!CUT_PATH) { alert('请先完成裁剪'); return }
+  if (!_bgmFile) { alert('请选择 BGM 文件'); return }
+
+  const btn = document.getElementById('btn_preview_bgm'); btn.disabled = true; btn.textContent = '生成中…'
+
+  const fd = new FormData()
+  fd.append('video_path', CUT_PATH)
+  fd.append('bgm_path', _bgmFile)
+  fd.append('bgm_volume', document.getElementById('vol_bgm').value)
+  fd.append('video_volume', document.getElementById('vol_video').value)
+  fd.append('duration', document.getElementById('bgm_preview_dur').value)
+  fd.append('start_at', '0')
+
+  try {
+    const r = await fetch('/api/preview-bgm', {method:'POST', body:fd}); const d = await r.json()
+    if (d.task_id) {
+      _bgmTaskId = d.task_id
+      document.getElementById('card_bgm_progress').style.display = ''
+      document.getElementById('card_bgm_preview').style.display = 'none'
+      pollBgmPreview(d.task_id)
+    } else alert(d.error || '失败')
+  } catch(e) { alert(e.message) }
+  btn.disabled = false; btn.textContent = '👂 BGM 预览'
+}
+
+function pollBgmPreview(tid) {
+  const p = setInterval(async () => {
+    try {
+      const r = await fetch('/api/task/' + tid); const t = await r.json()
+      document.getElementById('bgm_progress').style.width = (t.progress || 0) + '%'
+      document.getElementById('bgm_msg').innerHTML = `<span class="spinner"></span>${escHtml(t.message || '')}`
+
+      if (t.status === 'completed') {
+        clearInterval(p)
+        document.getElementById('card_bgm_progress').style.display = 'none'
+        document.getElementById('card_bgm_preview').style.display = ''
+        const pv = document.getElementById('bgm_preview_player')
+        pv.src = '/api/video/' + encodeURIComponent(t.result.preview_path.split('\\').pop() || t.result.preview_path.split('/').pop()) + '?t=' + Date.now()
+        pv.load(); pv.play()
+        document.getElementById('card_bgm_preview').scrollIntoView({behavior:'smooth'})
+        document.querySelector('.step[data-s="4"]').classList.add('done')
+      } else if (t.status === 'error') {
+        clearInterval(p)
+        document.getElementById('bgm_msg').innerHTML = '❌ ' + escHtml(t.error || '')
+      }
+    } catch(e) { clearInterval(p) }
+  }, 1000)
+}
+
+// ── Step 5: 导出 ─────────────────────────────
+function updateExportSummary() {
+  document.getElementById('exp_segs').textContent = SEGS.length ? SEGS.map(s => formatTime(s.s) + '~' + formatTime(s.e)).join(', ') : '-'
+  document.getElementById('exp_asr').textContent = document.getElementById('asr_model').value
+  document.getElementById('exp_speed').textContent = document.getElementById('speed_input').value + 'x'
+  document.getElementById('exp_subs').textContent = SRT_PATH ? '✅ 已就绪' : '⏳ 未转录'
+  document.getElementById('exp_bgm').textContent = _bgmFile ? '✅ ' + _bgmFile.split('\\').pop()?.split('/').pop() : '无'
+  document.getElementById('exp_vol').textContent = `原声 ${document.getElementById('vol_video').value} / BGM ${document.getElementById('vol_bgm').value}`
+  document.getElementById('exp_format').textContent = document.getElementById('export_format').value.toUpperCase()
+}
+
+async function doExport() {
+  if (!CUT_PATH) { alert('请先完成裁剪'); return }
+  const btn = document.getElementById('btn_export'); btn.disabled = true; btn.textContent = '导出中…'
+
+  const fd = new FormData()
+  fd.append('video_path', CUT_PATH)
+  fd.append('srt_path', SRT_PATH)
+  fd.append('bgm_path', _bgmFile || '')
+  fd.append('speed', document.getElementById('speed_input').value)
+  fd.append('bgm_volume', document.getElementById('vol_bgm').value)
+  fd.append('video_volume', document.getElementById('vol_video').value)
+  fd.append('burn_subtitles', SRT_PATH ? 'true' : 'false')
+  fd.append('export_format', document.getElementById('export_format').value)
+
+  try {
+    const r = await fetch('/api/export', {method:'POST', body:fd}); const d = await r.json()
+    if (d.task_id) {
+      document.getElementById('card_export_progress').style.display = ''
+      document.getElementById('card_export_result').style.display = 'none'
+      pollExport(d.task_id)
+    } else alert(d.error || '失败')
+  } catch(e) { alert(e.message) }
+  btn.disabled = false; btn.textContent = '📦 开始导出'
+}
+
+function pollExport(tid) {
+  const p = setInterval(async () => {
+    try {
+      const r = await fetch('/api/task/' + tid); const t = await r.json()
+      document.getElementById('exp_progress').style.width = (t.progress || 0) + '%'
+      document.getElementById('exp_msg').innerHTML = `<span class="spinner"></span>${escHtml(t.message || '')}`
+
+      if (t.status === 'completed') {
+        clearInterval(p)
+        document.getElementById('card_export_progress').style.display = 'none'
+        document.getElementById('card_export_result').style.display = ''
+        document.getElementById('exp_result_info').textContent = `已导出：${t.result.output_name}（${t.result.duration} 秒）`
+        document.getElementById('card_export_result').scrollIntoView({behavior:'smooth'})
+        document.querySelector('.step[data-s="5"]').classList.add('done')
+      } else if (t.status === 'error') {
+        clearInterval(p)
+        document.getElementById('exp_msg').innerHTML = '❌ ' + escHtml(t.error || '')
+      }
+    } catch(e) { clearInterval(p) }
+  }, 1000)
+}
+
+// ── 重置 ──────────────────────────────────────
+function resetAll() {
+  SEGS = []; DUR = 0; FN = ''; CUT_PATH = ''; CUT_AUDIO_PREVIEW = ''; SRT_PATH = ''; TRANS_TEXT = ''; _bgmFile = ''
+  clearAudioFallback()
+  document.getElementById('card_timeline').style.display = 'none'
+  document.getElementById('card_cut_result').style.display = 'none'
+  document.getElementById('card_transcribe_result').style.display = 'none'
+  document.getElementById('card_transcribe_progress').style.display = 'none'
+  document.getElementById('card_sub_preview').style.display = 'none'
+  document.getElementById('card_bgm_preview').style.display = 'none'
+  document.getElementById('card_bgm_progress').style.display = 'none'
+  document.getElementById('card_export_progress').style.display = 'none'
+  document.getElementById('card_export_result').style.display = 'none'
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('done'))
+  goStep(1)
+}
+
+// ── 辅助 ──────────────────────────────────────
+function formatTime(s) {
+  if (!s || isNaN(s)) return '00:00'
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60)
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+}
+
+function escHtml(s) {
+  if (!s) return ''
+  const d = document.createElement('div'); d.textContent = s; return d.innerHTML
+}
+
+// ── 打开输出文件夹 ──────────────────────────────
+async function openOutputFolder() {
+  try {
+    await fetch('/api/open-output', {method:'POST'})
+  } catch(e) {
+    alert('打开文件夹失败: ' + e.message)
+  }
+}
+
+// ═══════════════════════════════════════════════
+// ① 快捷键
+// ═══════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  const player = document.getElementById('player')
+  if (!player.src) return
+
+  // 如果在输入框内则不触发
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return
+
+  switch (e.code) {
+    case 'Space':
+      e.preventDefault()
+      player.paused ? player.play() : player.pause()
+      break
+    case 'ArrowLeft':
+      e.preventDefault()
+      player.currentTime = Math.max(0, player.currentTime - (e.shiftKey ? 0.1 : 1))
+      break
+    case 'ArrowRight':
+      e.preventDefault()
+      player.currentTime = Math.min(DUR || player.duration, player.currentTime + (e.shiftKey ? 0.1 : 1))
+      break
+    case 'Delete':
+    case 'Backspace':
+      // 删除播放头所在的片段
+      const ct = player.currentTime
+      const hit = SEGS.find(s => ct >= s.s && ct <= s.e)
+      if (hit) {
+        e.preventDefault()
+        rmSeg(hit.id)
+      }
+      break
+  }
+})
+
+// ═══════════════════════════════════════════════
+// ② 片段边缘吸附（Snap）
+// ═══════════════════════════════════════════════
+const SNAP_THRESHOLD = 0.5
+
+function snapTime(t) {
+  // 吸附到整秒
+  const whole = Math.round(t)
+  if (Math.abs(t - whole) < 0.15) return whole
+
+  // 吸附到其他片段边缘
+  for (const s of SEGS) {
+    if (Math.abs(t - s.s) < SNAP_THRESHOLD) return s.s
+    if (Math.abs(t - s.e) < SNAP_THRESHOLD) return s.e
+  }
+  return t
+}
+
+// ═══════════════════════════════════════════════
+// ④ 字幕样式预设
+// ═══════════════════════════════════════════════
+const SUB_PRESETS = {
+  default:   { name: '默认白字',   size: 16, color: '#FFFFFF', outline: '#000000', ow: 0.85, shadow: 0.55, bold: 'true', italic: 'false', align: 'bc', margin: 40 },
+  highlight: { name: '亮黄醒目',   size: 20, color: '#FFD700', outline: '#000000', ow: 1.2,  shadow: 0.8,  bold: 'true', italic: 'false', align: 'bc', margin: 50 },
+  elegant:   { name: '雅致灰白',   size: 14, color: '#E0E0E0', outline: '#333333', ow: 0.6,  shadow: 0.3,  bold: 'false',italic: 'false', align: 'bc', margin: 35 },
+  game:      { name: '游戏风格',   size: 18, color: '#00FFCC', outline: '#004433', ow: 1.0,  shadow: 0.6,  bold: 'true', italic: 'false', align: 'bl', margin: 30 },
+  top:       { name: '顶部字幕',   size: 14, color: '#FFFFFF', outline: '#000000', ow: 0.7,  shadow: 0.4,  bold: 'false',italic: 'false', align: 'tc', margin: 20 },
+}
+
+function applySubPreset(key) {
+  const p = SUB_PRESETS[key]
+  if (!p) return
+  document.getElementById('sub_size').value = p.size
+  document.getElementById('sub_color').value = p.color
+  document.getElementById('sub_outline_color').value = p.outline
+  document.getElementById('sub_outline').value = p.ow
+  document.getElementById('sub_outline').nextElementSibling.textContent = p.ow
+  document.getElementById('sub_shadow').value = p.shadow
+  document.getElementById('sub_shadow').nextElementSibling.textContent = p.shadow
+  document.getElementById('sub_bold').value = p.bold
+  document.getElementById('sub_italic').value = p.italic
+  document.getElementById('sub_align').value = p.align
+  document.getElementById('sub_margin').value = p.margin
+  scheduleSubPreview()
+}
+
+// ═══════════════════════════════════════════════
+// ⑦ 进度保存到 localStorage
+// ═══════════════════════════════════════════════
+function saveState() {
+  try {
+    const state = {
+      segs: SEGS,
+      bgmFolder: document.getElementById('bgm_folder').value,
+      bgmFile: _bgmFile,
+      speed: document.getElementById('speed_input').value,
+      subSize: document.getElementById('sub_size')?.value,
+      subColor: document.getElementById('sub_color')?.value,
+      subAlign: document.getElementById('sub_align')?.value,
+      subBold: document.getElementById('sub_bold')?.value,
+    }
+    localStorage.setItem('aiclip_state', JSON.stringify(state))
+  } catch(e) { /* ignore */ }
+}
+
+function restoreState() {
+  try {
+    const raw = localStorage.getItem('aiclip_state')
+    if (!raw) return
+    const state = JSON.parse(raw)
+    if (state.segs && state.segs.length) {
+      SEGS = state.segs
+      // 优先恢复片段，重新渲染
+      setTimeout(renderSegs, 100)
+    }
+    if (state.speed) document.getElementById('speed_input').value = state.speed
+  } catch(e) { /* ignore */ }
+}
+
+// 恢复状态
+restoreState()
+
+// 自动保存：每 5 秒
+setInterval(saveState, 5000)
+
+// 操作时保存
+const _origAddSeg = addSeg
+function _wrappedAddSeg(s, e) { _origAddSeg(s, e); saveState() }
+addSeg = _wrappedAddSeg
+
+const _origRmSeg = rmSeg
+function _wrappedRmSeg(id) { _origRmSeg(id); saveState() }
+rmSeg = _wrappedRmSeg
+
+// ═══════════════════════════════════════════════
+// ⑨ 主题切换
+// ═══════════════════════════════════════════════
+function toggleTheme() {
+  const root = document.documentElement
+  const isDark = !root.hasAttribute('data-theme') || root.getAttribute('data-theme') === 'dark'
+  if (isDark) {
+    root.setAttribute('data-theme', 'light')
+    localStorage.setItem('aiclip_theme', 'light')
+  } else {
+    root.removeAttribute('data-theme')
+    localStorage.setItem('aiclip_theme', 'dark')
+  }
+}
+
+// 恢复主题
+;(function() {
+  const saved = localStorage.getItem('aiclip_theme')
+  if (saved === 'light') document.documentElement.setAttribute('data-theme', 'light')
+})()
+
+// ── Resize 波形 ──
+window.addEventListener('resize', () => drawWaveform())
+</script>
+</body>
+</html>

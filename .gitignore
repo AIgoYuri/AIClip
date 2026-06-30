@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# 开发笔记（不上传）
+assets/
+
+# 运行时生成的临时文件
+data/*.tmp
+data/.sub_prev_*
+data/_sub_preview.srt
+data/.browser_tmp.mp4
+data/*.snippet.mp4
+data/*.bgm_prev.mp4
+data/.thumb_*
+
+# 用户上传的视频和导出文件
+data/*.mp4
+data/*.mov
+data/*.avi
+output/
+
+# 环境
+.env
+.venv/
+venv/
+
+# 系统
+Thumbs.db
+.DS_Store
+*.swp
